@@ -1,0 +1,14 @@
+#!/bin/bash
+set -e
+
+# Register dockttier as the `docker` alternative at a higher priority than the
+# real docker binary. The real binary is left untouched and remains callable.
+if ! update-alternatives --install /usr/bin/docker docker /usr/local/bin/dockttier 100; then
+    echo "dockttier: failed to register the docker alternative." >&2
+    echo "The real docker binary has not been modified." >&2
+    exit 1
+fi
+
+echo "dockttier installed. All docker commands are now prettified."
+echo "  Disable temporarily:  DOCKTTIER_DISABLE=1 docker <command>"
+echo "  Uninstall:            sudo apt remove dockttier-plugin"

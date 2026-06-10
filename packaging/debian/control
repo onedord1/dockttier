@@ -1,0 +1,12 @@
+Package: dockttier-plugin
+Version: 0.1.0
+Architecture: amd64
+Maintainer: dockttier maintainers <maintainers@dockttier.dev>
+Depends: docker-ce | docker.io
+Section: utils
+Priority: optional
+Description: Docker CLI output prettifier
+ dockttier enhances Docker command output with rich terminal formatting.
+ Installs as a transparent proxy — use docker commands exactly as normal.
+ The real docker binary is never modified; dockttier simply runs in front of
+ it and re-renders its output. Disable per-command with DOCKTTIER_DISABLE=1.

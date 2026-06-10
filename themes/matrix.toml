@@ -1,0 +1,16 @@
+# dockttier theme: matrix
+# Green monochrome terminal, ▮▯ bars, classic |/-\ spinner.
+# Tip: set disable_emoji = true for the full retro-terminal effect.
+# Install: cp themes/matrix.toml ~/.config/dockttier/config.toml
+
+[theme]
+preset        = "matrix"
+disable_emoji = false
+
+[behavior]
+show_build_logs  = false
+stats_timeout_ms = 500
+pre_snapshot     = true
+
+[passthrough]
+commands = ["login", "logout", "trust"]

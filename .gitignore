@@ -1,0 +1,8 @@
+# Build output
+/bin/
+/dist/
+
+# Local editor / OS cruft
+.DS_Store
+*.swp
+/.kiro/

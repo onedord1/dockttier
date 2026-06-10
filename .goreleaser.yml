@@ -1,0 +1,59 @@
+version: 2
+project_name: dockttier
+
+before:
+  hooks:
+  - go mod tidy
+
+builds:
+- id: dockttier
+  main: .
+  binary: dockttier
+  env:
+  - CGO_ENABLED=0
+  goos: [ linux, darwin ]
+  goarch: [ amd64, arm64 ]
+  flags:
+  - -trimpath
+  ldflags:
+  - -s -w -X github.com/dockttier/dockttier/cmd.version={{.Version}}
+
+archives:
+- id: dockttier
+  formats: [ tar.gz ]
+  name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+
+nfpms:
+- id: dockttier
+  package_name: dockttier-plugin
+  file_name_template: "{{ .PackageName }}_{{ .Version }}_{{ .Arch }}"
+  homepage: https://github.com/onedord1/dockttier
+  description: Docker CLI output prettifier — a transparent proxy over the docker CLI.
+  maintainer: dockttier maintainers <maintainers@dockttier.dev>
+  license: MIT
+  formats: [ deb, rpm ]
+  bindir: /usr/local/bin
+  dependencies:
+  - docker-ce
+  scripts:
+    postinstall: packaging/debian/postinst
+    preremove: packaging/debian/prerm
+
+brews:
+- repository:
+    owner: onedord1
+    name: homebrew-tap
+  directory: Formula
+  homepage: https://github.com/onedord1/dockttier
+  description: Docker CLI output prettifier
+  install: |
+    bin.install "dockttier"
+  caveats: |
+    dockttier is a transparent docker shim. To enable it, place it ahead of the
+    real docker binary on your PATH, or symlink it as `docker`.
+
+checksum:
+  name_template: "checksums.txt"
+
+release:
+  prerelease: auto

@@ -1,0 +1,16 @@
+# dockttier configuration — copy to ~/.config/dockttier/config.toml
+# All keys are optional; omitted keys fall back to built-in defaults.
+
+[theme]
+preset        = "midnight"   # midnight | neon | dracula | solarized | matrix
+brand_color   = "#00d4aa"    # optional: override the signature accent (6-digit hex)
+disable_emoji = false        # true => ASCII fallback glyphs instead of Unicode icons
+
+[behavior]
+show_build_logs  = false     # show raw build log lines under each step
+stats_timeout_ms = 500       # per-container docker stats timeout (50–60000)
+pre_snapshot     = true      # snapshot `docker ps -a` before rm for name enrichment
+
+[passthrough]
+# Subcommands here are always passed through unchanged (no prettifying).
+commands = ["login", "logout", "trust"]

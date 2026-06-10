@@ -1,0 +1,6 @@
+#!/bin/bash
+set -e
+
+# Remove the docker alternative registration. The real docker binary is
+# restored as the active `docker` automatically by update-alternatives.
+update-alternatives --remove docker /usr/local/bin/dockttier || true
