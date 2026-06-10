@@ -1,4 +1,4 @@
-# dockttier
+# dockttier - Simplify Logs with enhanced visual !!
 
 **Docker output, made beautiful.**
 
