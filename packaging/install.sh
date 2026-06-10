@@ -18,10 +18,13 @@ case "$arch" in
 esac
 
 echo "Resolving latest dockttier release for ${os}/${arch}…"
-tag="$(curl -fsSL "https://api.github.com/repos/${REPO}/releases/latest" \
-    | grep -m1 '"tag_name"' | cut -d '"' -f4)"
+api_json="$(curl -fsSL "https://api.github.com/repos/${REPO}/releases/latest")" || {
+    echo "could not reach the GitHub releases API for ${REPO}" >&2
+    exit 1
+}
+tag="$(printf '%s\n' "${api_json}" | grep '"tag_name"' | head -n1 | cut -d '"' -f4)"
 if [ -z "${tag}" ]; then
-    echo "could not determine latest release tag" >&2
+    echo "could not determine latest release tag (is there a published release?)" >&2
     exit 1
 fi
 version="${tag#v}"
