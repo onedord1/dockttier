@@ -1,6 +1,17 @@
 #!/bin/bash
 set -e
 
-# Remove the docker alternative registration. The real docker binary is
-# restored as the active `docker` automatically by update-alternatives.
-update-alternatives --remove docker /usr/local/bin/dockttier || true
+# Remove the docker shim symlink (only if it is ours) and restore any backed-up
+# real docker. The real docker binary at /usr/bin/docker is never touched.
+update-alternatives --remove docker /usr/local/bin/dockttier >/dev/null 2>&1 || true
+
+if [ -L /usr/local/bin/docker ]; then
+    target="$(readlink -f /usr/local/bin/docker 2>/dev/null || true)"
+    if [ "${target}" = "$(readlink -f /usr/local/bin/dockttier 2>/dev/null || echo /usr/local/bin/dockttier)" ]; then
+        rm -f /usr/local/bin/docker
+    fi
+fi
+
+if [ -e /usr/local/bin/docker.pre-dockttier ]; then
+    mv -f /usr/local/bin/docker.pre-dockttier /usr/local/bin/docker
+fi

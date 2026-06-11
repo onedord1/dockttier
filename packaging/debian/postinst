@@ -1,14 +1,23 @@
 #!/bin/bash
 set -e
 
-# Register dockttier as the `docker` alternative at a higher priority than the
-# real docker binary. The real binary is left untouched and remains callable.
-if ! update-alternatives --install /usr/bin/docker docker /usr/local/bin/dockttier 100; then
-    echo "dockttier: failed to register the docker alternative." >&2
-    echo "The real docker binary has not been modified." >&2
-    exit 1
+# Shim the docker CLI via a PATH symlink in /usr/local/bin. This works even when
+# /usr/bin/docker is a regular file (docker-ce / docker.io), which
+# update-alternatives refuses to replace. /usr/local/bin precedes /usr/bin on
+# standard Debian/Ubuntu PATHs, so the shim takes priority. The real docker
+# binary is never modified.
+
+# Clean any stale alternatives entry from older packages.
+update-alternatives --remove docker /usr/local/bin/dockttier >/dev/null 2>&1 || true
+
+# Back up a pre-existing real docker living in /usr/local/bin (uncommon).
+if [ -e /usr/local/bin/docker ] && [ ! -L /usr/local/bin/docker ]; then
+    mv -f /usr/local/bin/docker /usr/local/bin/docker.pre-dockttier
 fi
 
+ln -sf /usr/local/bin/dockttier /usr/local/bin/docker
+
 echo "dockttier installed. All docker commands are now prettified."
-echo "  Disable temporarily:  DOCKTTIER_DISABLE=1 docker <command>"
-echo "  Uninstall:            sudo apt remove dockttier-plugin"
+echo "  Run 'hash -r' (bash) / 'rehash' (zsh) or open a new shell to pick it up."
+echo "  Disable once:  DOCKTTIER_DISABLE=1 docker <command>"
+echo "  Uninstall:     sudo apt remove dockttier-plugin"

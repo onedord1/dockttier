@@ -100,28 +100,44 @@ The real docker exit code is always preserved.
 
 ## Install
 
-### Script - Recommanded
+### Script — recommended
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/onedord1/dockttier/main/packaging/install.sh | bash
 ```
 
-### Debian / Ubuntu (`.deb`) - *Coming Soon*
+This downloads the latest release binary to `/usr/local/bin/dockttier` and shims
+the docker CLI by creating a `docker` symlink in `/usr/local/bin` (which comes
+before `/usr/bin` on a standard PATH). The real docker binary at
+`/usr/bin/docker` is never modified.
+
+> After installing, run `hash -r` (bash) / `rehash` (zsh), **or open a new
+> terminal**, so your shell stops using the previously-cached docker path.
+
+Verify it's active:
 
 ```bash
-sudo apt install ./dockttier-plugin_0.1.0_amd64.deb
+hash -r            # bash   (zsh: rehash)
+command -v docker  # should print /usr/local/bin/docker
+docker images      # styled output
 ```
-
-The post-install script registers dockttier as the `docker` alternative
-(`update-alternatives --install /usr/bin/docker docker /usr/local/bin/dockttier 100`).
-The real docker binary is left in place.
 
 ### From source
 
 ```bash
 make build          # produces ./bin/dockttier
-make install        # copies to /usr/local/bin and registers the shim
+make install        # installs to /usr/local/bin and shims docker
+hash -r             # (or open a new shell)
 ```
+
+### Debian / Ubuntu (`.deb`) — *coming soon*
+
+```bash
+sudo apt install ./dockttier-plugin_0.1.0_amd64.deb
+```
+
+The package's post-install creates the same `/usr/local/bin/docker` shim. The
+real docker binary is left in place.
 
 ---
 
@@ -137,19 +153,41 @@ docker ps
 docker system df
 ```
 
-Escape hatches:
+### Temporarily disable
 
 ```bash
-DOCKTTIER_DISABLE=1 docker images   # full raw passthrough, zero overhead
+DOCKTTIER_DISABLE=1 docker images   # one command, raw passthrough
 NO_COLOR=1 docker images            # also disables formatting
-docker images | grep node           # piped => automatic raw passthrough
+docker images | grep node           # piping auto-disables styling
 ```
 
-Uninstall:
+To disable for a whole shell session, put `/usr/bin` ahead of the shim or alias
+docker to the real binary:
 
 ```bash
-sudo apt remove dockttier-plugin    # or: make uninstall
+alias docker=/usr/bin/docker   # this shell only; 'unalias docker' to re-enable
 ```
+
+### Uninstall (completely remove dockttier)
+
+If you installed with the script:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/onedord1/dockttier/main/packaging/install.sh | bash -s -- --uninstall
+```
+
+If you installed from source / want to do it manually:
+
+```bash
+make uninstall
+# or, by hand:
+sudo update-alternatives --remove docker /usr/local/bin/dockttier 2>/dev/null || true
+sudo rm -f /usr/local/bin/docker /usr/local/bin/dockttier
+hash -r            # (or open a new shell)
+```
+
+After uninstalling, `docker` resolves to the real Docker CLI again. (If you
+installed the `.deb`: `sudo apt remove dockttier-plugin`.)
 
 ---
 
