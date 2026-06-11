@@ -100,7 +100,13 @@ The real docker exit code is always preserved.
 
 ## Install
 
-### Debian / Ubuntu (`.deb`)
+### Script - Recommanded
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/onedord1/dockttier/main/packaging/install.sh | bash
+```
+
+### Debian / Ubuntu (`.deb`) - *Coming Soon*
 
 ```bash
 sudo apt install ./dockttier-plugin_0.1.0_amd64.deb
@@ -109,12 +115,6 @@ sudo apt install ./dockttier-plugin_0.1.0_amd64.deb
 The post-install script registers dockttier as the `docker` alternative
 (`update-alternatives --install /usr/bin/docker docker /usr/local/bin/dockttier 100`).
 The real docker binary is left in place.
-
-### Script
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/onedord1/dockttier/main/packaging/install.sh | bash
-```
 
 ### From source
 
@@ -188,19 +188,6 @@ is the normal case and uses built-in defaults silently.
    - wires streams directly (passthrough / pipe / `NO_COLOR` / `DOCKTTIER_DISABLE`), or
    - allocates a raw PTY for interactive `exec`/`run`/`attach -it` sessions.
 4. It exits with docker's exact exit code.
-
-### Project layout
-
-```
-main.go            entry point
-cmd/               wiring: config → detect → intercept → renderers
-intercept/         real-docker discovery, exec/pipe/PTY, signal forwarding
-detect/            argv → renderer classification, interactive detection
-renderers/         per-command renderers
-style/             palette, icons, progress bars, badges, tables, layout
-config/            ~/.config/dockttier/config.toml loader
-packaging/         .deb scripts + install.sh
-```
 
 ---
 
