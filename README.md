@@ -26,7 +26,8 @@ output what Prettier does for code.
   - `build` — BuildKit step list with live timing (parses `--progress=rawjson`).
   - `push` / `pull` — per-layer progress bars, "layer exists" detection.
   - `images` — styled table with color-coded sizes, size bars and layer counts.
-  - `ps` / `container ls` — table with live CPU and memory per container.
+  - `ps` / `container ls` — table with live CPU and memory (usage / limit) per container.
+  - `stats` — live, colorful resource table (CPU%, MEM% bar, usage/limit, net/block I/O, PIDs).
   - `network ls` — styled table, driver color-coding.
   - `volume ls` — styled table with driver and links.
   - `rm` / `rmi` / `network rm` / `volume rm` — removal list with status badges and name enrichment.

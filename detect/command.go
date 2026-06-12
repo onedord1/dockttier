@@ -25,6 +25,7 @@ const (
 	CmdLogs
 	CmdExec
 	CmdTag
+	CmdStats
 	CmdFallback
 )
 
@@ -152,6 +153,9 @@ func Classify(args []string, passthrough []string) CommandType {
 	case matchPrefix(seq, []string{"image", "tag"}),
 		matchPrefix(seq, []string{"tag"}):
 		return CmdTag
+	case matchPrefix(seq, []string{"container", "stats"}),
+		matchPrefix(seq, []string{"stats"}):
+		return CmdStats
 	}
 	return CmdFallback
 }
@@ -173,7 +177,7 @@ func Subcommand(args []string) string {
 			"container remove", "container prune", "container logs", "volume prune",
 			"network prune", "buildx build", "network ls", "network list",
 			"network rm", "network remove", "volume ls", "volume list",
-			"volume rm", "volume remove", "image tag":
+			"volume rm", "volume remove", "image tag", "container stats":
 			return two
 		}
 	}

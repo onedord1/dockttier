@@ -125,6 +125,8 @@ func pick(t detect.CommandType) renderers.Renderer {
 		return renderers.Exec{}
 	case detect.CmdTag:
 		return renderers.Tag{}
+	case detect.CmdStats:
+		return renderers.Stats{}
 	}
 	return renderers.Fallback{}
 }

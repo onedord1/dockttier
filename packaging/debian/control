@@ -1,5 +1,5 @@
 Package: dockttier-plugin
-Version: 0.1.0
+Version: 0.2.0
 Architecture: amd64
 Maintainer: dockttier maintainers <maintainers@dockttier.dev>
 Depends: docker-ce | docker.io

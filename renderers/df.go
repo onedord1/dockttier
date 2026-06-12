@@ -11,8 +11,8 @@ import (
 	"github.com/dockttier/dockttier/style"
 )
 
-// DiskUsage renders `docker system df` with per-category rows and a single
-// stacked proportional usage bar.
+// DiskUsage renders `docker system df` with bold color-coded categories, thick
+// proportional bars and a stacked total-usage bar.
 type DiskUsage struct{}
 
 type dfRecord struct {
@@ -59,7 +59,7 @@ func (DiskUsage) Run(ctx Context) int {
 	}
 
 	out("")
-	out(style.SectionLabel("storage usage"))
+	out("  " + style.Dim.Render("S T O R A G E   U S A G E"))
 	out("")
 
 	for _, r := range recs {
@@ -67,48 +67,82 @@ func (DiskUsage) Run(ctx Context) int {
 	}
 
 	out("")
-	out("  " + style.Dim.Render("total usage (proportional)"))
 	out("  " + stackedBar(recs, total))
 	out("")
-	out(style.Footer(style.IconRunning, "Disk usage",
-		style.KV("used", humanSize(total), lipColor(accentDF())),
-		style.KV("reclaimable", humanSize(totalReclaim), lipColor(style.HexYellow)),
-	))
+	out("  " + style.Border.Render(strings.Repeat("─", style.Width()-4)))
+	out("  " + style.Muted.Render("total used ") + style.Bold.Render(humanSize(total)) +
+		"    " + style.Muted.Render("reclaimable ") + style.Bold.Render(humanSize(totalReclaim)))
 	out("  " + style.Dim.Render("run ") + style.Brand.Render("docker system prune") + style.Dim.Render(" to reclaim"))
 	return 0
 }
 
 func dfRow(r dfRecord, total int64) string {
-	pct := 0.0
-	if total > 0 {
-		pct = float64(r.bytes) / float64(total) * 100
-	}
 	barColor := categoryColor(r.Type)
-	bar := style.BarFromRatio(r.bytes, max64(total, 1), 30, lipColor(barColor))
 
-	reclaim := style.Dim.Render("—")
+	frac := 0.0
+	if total > 0 {
+		frac = float64(r.bytes) / float64(total)
+	}
+	bar := thickBar(frac, 34, barColor)
+
+	name := lipgloss.NewStyle().Foreground(lipColor(barColor)).Bold(true).Render(
+		style.PadRight(categoryLabel(r.Type), 12))
+	count := style.Dim.Render(style.PadLeft(r.count, 4))
+	size := style.Orange.Render(style.PadLeft(humanSize(r.bytes), 10))
+
+	// Reclaimable, right-aligned to the terminal edge.
+	var reclaimStyled, reclaimPlain string
 	if r.reclaimable > 0 {
-		reclaim = style.Yellow.Render("↩ " + humanSize(r.reclaimable))
+		reclaimPlain = "↩ " + humanSize(r.reclaimable)
+		reclaimStyled = style.Brand.Render("↩ ") + style.Text.Render(humanSize(r.reclaimable))
+	} else {
+		reclaimPlain = "—"
+		reclaimStyled = style.Dim.Render("—")
 	}
 
-	name := style.Cell(categoryLabel(r.Type), 12)
-	count := style.Cell(r.count, 5)
-	size := style.PadLeft(humanSize(r.bytes), 10)
-	return "  " + style.Text.Render(name) +
-		style.Dim.Render(count) + "  " +
-		lipgloss.NewStyle().Foreground(lipColor(barColor)).Render(size) + "  " +
-		bar + style.Muted.Render(fmt.Sprintf("  %4.0f%%  ", pct)) + reclaim
+	left := "  " + name + "  " + count + "  " + size + "   " + bar
+	leftW := lipgloss.Width("  "+style.PadRight(categoryLabel(r.Type), 12)+"  "+
+		style.PadLeft(r.count, 4)+"  "+style.PadLeft(humanSize(r.bytes), 10)+"   ") + 34
+	gap := style.Width() - leftW - lipgloss.Width(reclaimPlain) - 2
+	if gap < 1 {
+		gap = 1
+	}
+	return left + strings.Repeat(" ", gap) + reclaimStyled
+}
+
+// thickBar renders a solid bar: filled cells in `color`, the remaining track in
+// a medium grey (border color), giving the chunky look of the target design.
+func thickBar(frac float64, width int, color string) string {
+	if frac < 0 {
+		frac = 0
+	}
+	if frac > 1 {
+		frac = 1
+	}
+	filled := int(frac*float64(width) + 0.5)
+	if filled > width {
+		filled = width
+	}
+	if filled == 0 && frac > 0 {
+		filled = 1
+	}
+	full := lipgloss.NewStyle().Foreground(lipColor(color)).Render(strings.Repeat("█", filled))
+	track := style.Border.Render(strings.Repeat("█", width-filled))
+	return full + track
 }
 
 func stackedBar(recs []dfRecord, total int64) string {
-	const width = 50
+	width := style.Width() - 4
+	if width < 20 {
+		width = 20
+	}
 	if total <= 0 {
-		return style.EmptyBar(width)
+		return style.Border.Render(strings.Repeat("█", width))
 	}
 	var b strings.Builder
 	used := 0
 	for _, r := range recs {
-		seg := int(float64(r.bytes) / float64(total) * width)
+		seg := int(float64(r.bytes) / float64(total) * float64(width))
 		if seg <= 0 {
 			continue
 		}
@@ -120,9 +154,9 @@ func stackedBar(recs []dfRecord, total int64) string {
 		used += seg
 	}
 	if used < width {
-		b.WriteString(style.Bar(0, width-used, lipColor(style.HexBarEmpty)))
+		b.WriteString(style.Border.Render(strings.Repeat("█", width-used)))
 	}
-	return "[" + b.String() + "]"
+	return b.String()
 }
 
 func categoryColor(t string) string {
@@ -153,17 +187,9 @@ func categoryLabel(t string) string {
 	return t
 }
 
-// parseReclaimable handles docker's "84.2MB (11%)" reclaimable format.
 func parseReclaimable(s string) int64 {
 	if i := strings.Index(s, "("); i >= 0 {
 		s = s[:i]
 	}
 	return parseSize(strings.TrimSpace(s))
-}
-
-func max64(a, b int64) int64 {
-	if a > b {
-		return a
-	}
-	return b
 }

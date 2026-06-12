@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/charmbracelet/lipgloss"
@@ -14,7 +13,7 @@ import (
 )
 
 // Containers renders `docker ps` / `docker container ls` as a styled table with
-// live per-container CPU and memory usage.
+// live per-container CPU and memory (usage / limit) pulled from docker stats.
 type Containers struct{}
 
 type containerRecord struct {
@@ -25,17 +24,22 @@ type containerRecord struct {
 	Status string `json:"Status"`
 	Ports  string `json:"Ports"`
 
-	cpu     string // formatted, "" => unknown
-	mem     string
 	cpuPct  float64
-	memByte int64
+	memPct  float64
+	memUsed int64
+	memText string // "38.07MiB / 512MiB"
 	statsOK bool
 }
 
 type statsRecord struct {
 	ID       string `json:"ID"`
+	Name     string `json:"Name"`
 	CPUPerc  string `json:"CPUPerc"`
 	MemUsage string `json:"MemUsage"`
+	MemPerc  string `json:"MemPerc"`
+	NetIO    string `json:"NetIO"`
+	BlockIO  string `json:"BlockIO"`
+	PIDs     string `json:"PIDs"`
 }
 
 func (Containers) Run(ctx Context) int {
@@ -62,17 +66,17 @@ func (Containers) Run(ctx Context) int {
 		rows = append(rows, r)
 	}
 
-	enrichStats(ctx.Real, rows, ctx.StatsTimeout)
+	attachStats(ctx.Real, rows, ctx.StatsTimeout)
 
 	cols := []style.Column{
 		{Title: "ID", Width: 12},
-		{Title: "NAME", Width: 14},
+		{Title: "NAME", Width: 16},
 		{Title: "IMAGE", Width: 18},
-		{Title: "STATUS", Width: 10},
+		{Title: "STATUS", Width: 9},
 		{Title: "UPTIME", Width: 12},
-		{Title: "PORTS", Width: 22},
-		{Title: "CPU%", Width: 6, Right: true},
-		{Title: "MEM", Width: 9, Right: true},
+		{Title: "CPU%", Width: 7, Right: true},
+		{Title: "MEM%", Width: 7, Right: true},
+		{Title: "MEM USAGE / LIMIT", Width: 20},
 	}
 
 	out("")
@@ -88,7 +92,7 @@ func (Containers) Run(ctx Context) int {
 		case "paused":
 			paused++
 		}
-		totalMem += r.memByte
+		totalMem += r.memUsed
 		out(containerRow(cols, r))
 	}
 
@@ -102,7 +106,6 @@ func (Containers) Run(ctx Context) int {
 }
 
 func containerRow(cols []style.Column, r containerRecord) string {
-	// Status dot + word.
 	var statusStyled, statusPlain string
 	switch r.State {
 	case "running":
@@ -116,35 +119,20 @@ func containerRow(cols []style.Column, r containerRecord) string {
 		statusPlain = "- exited"
 	}
 
-	uptime := r.Status
-
-	cpuStyled, cpuPlain := "-", "-"
-	memStyled, memPlain := "-", "-"
+	cpuStyled, cpuPlain := style.Dim.Render("-"), "-"
+	memPctStyled, memPctPlain := style.Dim.Render("-"), "-"
+	memStyled, memPlain := style.Dim.Render("-"), "-"
 	if r.statsOK {
-		cpuColor := style.HexGreen
-		switch {
-		case r.cpuPct > 3.0:
-			cpuColor = style.HexOrange
-		case r.cpuPct > 0.5:
-			cpuColor = style.HexYellow
-		}
-		cpuPlain = r.cpu
-		cpuStyled = lipgloss.NewStyle().Foreground(lipColor(cpuColor)).Render(r.cpu)
+		cpuColor := cpuColor(r.cpuPct)
+		cpuPlain = fmt.Sprintf("%.2f%%", r.cpuPct)
+		cpuStyled = lipgloss.NewStyle().Foreground(lipColor(cpuColor)).Render(cpuPlain)
 
-		memColor := style.HexGreen
-		switch {
-		case r.memByte > 70*1000*1000:
-			memColor = style.HexRed
-		case r.memByte > 40*1000*1000:
-			memColor = style.HexYellow
-		}
-		memPlain = humanSize(r.memByte)
+		memColor := memPctColor(r.memPct)
+		memPctPlain = fmt.Sprintf("%.1f%%", r.memPct)
+		memPctStyled = lipgloss.NewStyle().Foreground(lipColor(memColor)).Render(memPctPlain)
+
+		memPlain = r.memText
 		memStyled = lipgloss.NewStyle().Foreground(lipColor(memColor)).Render(memPlain)
-	}
-
-	ports := r.Ports
-	if ports == "" {
-		ports = "—"
 	}
 
 	styled := []string{
@@ -152,73 +140,113 @@ func containerRow(cols []style.Column, r containerRecord) string {
 		style.Text.Render(r.Names),
 		style.Muted.Render(r.Image),
 		statusStyled,
-		style.Muted.Render(uptime),
-		style.Dim.Render(ports),
+		style.Muted.Render(r.Status),
 		cpuStyled,
+		memPctStyled,
 		memStyled,
 	}
 	plain := []string{
-		shortHash(r.ID), r.Names, r.Image, statusPlain, uptime, ports, cpuPlain, memPlain,
+		shortHash(r.ID), r.Names, r.Image, statusPlain, r.Status, cpuPlain, memPctPlain, memPlain,
 	}
 	return style.Row(cols, styled, plain)
 }
 
-// enrichStats fills CPU/mem for each container via concurrent, timeout-bounded
-// `docker stats --no-stream` queries.
-func enrichStats(real string, rows []containerRecord, timeout time.Duration) {
-	if timeout <= 0 {
-		timeout = 500 * time.Millisecond
+func cpuColor(pct float64) string {
+	switch {
+	case pct > 3.0:
+		return style.HexOrange
+	case pct > 0.5:
+		return style.HexYellow
 	}
-	sem := make(chan struct{}, 16)
-	var wg sync.WaitGroup
-	for i := range rows {
-		if rows[i].State != "running" {
-			continue
-		}
-		wg.Add(1)
-		sem <- struct{}{}
-		go func(idx int) {
-			defer wg.Done()
-			defer func() { <-sem }()
-			rec, ok := queryStats(real, rows[idx].ID, timeout)
-			if !ok {
-				return
-			}
-			rows[idx].statsOK = true
-			rows[idx].cpu = rec.CPUPerc
-			fmt.Sscanf(strings.TrimSuffix(rec.CPUPerc, "%"), "%f", &rows[idx].cpuPct)
-			// MemUsage looks like "62.4MiB / 1.94GiB"; take the first field.
-			if parts := strings.SplitN(rec.MemUsage, "/", 2); len(parts) > 0 {
-				rows[idx].memByte = parseSize(strings.TrimSpace(parts[0]))
-			}
-		}(i)
-	}
-	wg.Wait()
+	return style.HexGreen
 }
 
-func queryStats(real, id string, timeout time.Duration) (statsRecord, bool) {
-	type result struct {
-		rec statsRecord
-		ok  bool
+func memPctColor(pct float64) string {
+	switch {
+	case pct > 80:
+		return style.HexRed
+	case pct > 50:
+		return style.HexYellow
 	}
-	ch := make(chan result, 1)
+	return style.HexGreen
+}
+
+// attachStats fetches CPU/memory for all running containers in a single
+// `docker stats --no-stream` call and merges the results by id and name.
+func attachStats(real string, rows []containerRecord, timeout time.Duration) {
+	hasRunning := false
+	for _, r := range rows {
+		if r.State == "running" {
+			hasRunning = true
+			break
+		}
+	}
+	if !hasRunning {
+		return
+	}
+
+	// docker stats --no-stream samples for ~1.3s, so use a generous timeout.
+	to := 6 * time.Second
+	if timeout > to {
+		to = timeout
+	}
+
+	byID := bulkStats(real, to)
+	for i := range rows {
+		key := shortHash(rows[i].ID)
+		st, ok := byID[key]
+		if !ok {
+			st, ok = byID[rows[i].Names]
+		}
+		if !ok {
+			continue
+		}
+		rows[i].statsOK = true
+		rows[i].memText = st.MemUsage
+		fmt.Sscanf(strings.TrimSuffix(strings.TrimSpace(st.CPUPerc), "%"), "%f", &rows[i].cpuPct)
+		fmt.Sscanf(strings.TrimSuffix(strings.TrimSpace(st.MemPerc), "%"), "%f", &rows[i].memPct)
+		if parts := strings.SplitN(st.MemUsage, "/", 2); len(parts) > 0 {
+			rows[i].memUsed = parseSize(strings.TrimSpace(parts[0]))
+		}
+	}
+}
+
+func bulkStats(real string, timeout time.Duration) map[string]statsRecord {
+	result := map[string]statsRecord{}
+	type out struct{ data []byte }
+	ch := make(chan out, 1)
 	go func() {
-		out, err := intercept.Capture(real, "stats", "--no-stream", "--format", "{{json .}}", id)
+		b, err := intercept.Capture(real, "stats", "--no-stream", "--format", "{{json .}}")
 		if err != nil {
-			ch <- result{}
+			ch <- out{}
 			return
 		}
-		var rec statsRecord
-		if err := json.Unmarshal([]byte(strings.TrimSpace(string(out))), &rec); err != nil {
-			ch <- result{}
-			return
-		}
-		ch <- result{rec, true}
+		ch <- out{b}
 	}()
+
+	var data []byte
 	select {
 	case r := <-ch:
-		return r.rec, r.ok
+		data = r.data
 	case <-time.After(timeout):
-		return statsRecord{}, false
+		return result
 	}
+
+	for _, line := range strings.Split(strings.TrimSpace(string(data)), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		var st statsRecord
+		if json.Unmarshal([]byte(line), &st) != nil {
+			continue
+		}
+		if st.ID != "" {
+			result[shortHash(st.ID)] = st
+		}
+		if st.Name != "" {
+			result[st.Name] = st
+		}
+	}
+	return result
 }

@@ -107,7 +107,8 @@ script -qec "./bin/dockttier images" /dev/null | sed -r 's/\x1b\[[0-9;]*m//g'
 | Command | What you'll see |
 |---|---|
 | `docker images` | table with color-coded sizes, mini size bars, layer counts |
-| `docker ps` / `docker ps -a` | container table with live CPU% / MEM, status dots |
+| `docker ps` / `docker ps -a` | container table with live CPU% / MEM (usage/limit), status dots |
+| `docker stats` | live colorful resource table (Ctrl-C to stop) |
 | `docker network ls` | styled table, driver color-coding |
 | `docker volume ls` | styled table with driver and links |
 | `docker build -t x .` | live BuildKit step list with timings + summary |
